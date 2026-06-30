@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hearts2Hearts Quiz Game</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#0d0d1a;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:2rem 1rem}
+#app{width:100%;max-width:520px;color:#f0f0f0}
+h2.title{text-align:center;font-size:22px;font-weight:600;color:#fff;margin-bottom:4px}
+p.sub{text-align:center;font-size:13px;color:#aaa;margin-bottom:1.2rem}
+#hud{display:flex;justify-content:space-between;align-items:center;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:10px 16px;margin-bottom:1.2rem}
+.hud-item{text-align:center}
+.hud-label{font-size:11px;color:#888;margin-bottom:2px}
+.hud-val{font-size:18px;font-weight:600;color:#fff}
+#progress-bar{height:5px;background:#2a2a4a;border-radius:3px;margin-bottom:1.2rem;overflow:hidden}
+#progress-fill{height:100%;background:linear-gradient(90deg,#e83060,#cc44aa);border-radius:3px;transition:width .3s}
+#question-box{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1rem;min-height:110px;display:flex;flex-direction:column;justify-content:center}
+.q-type{font-size:11px;color:#cc44aa;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.q-emoji{font-size:40px;text-align:center;margin:8px 0}
+.q-text{font-size:15px;color:#f0f0f0;line-height:1.5}
+#choices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem}
+.choice{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:8px;padding:12px 14px;font-size:14px;color:#f0f0f0;cursor:pointer;transition:all .15s;text-align:left;line-height:1.3}
+.choice:hover:not(:disabled){background:#22224a;border-color:#cc44aa;color:#f0aadd}
+.choice.correct{background:#0d3d20!important;border-color:#22cc66!important;color:#66ee99!important}
+.choice.wrong{background:#3d0d1a!important;border-color:#cc2244!important;color:#ee6688!important}
+.choice:disabled{cursor:default}
+#feedback{text-align:center;min-height:36px;font-size:13px;font-weight:500;margin-bottom:.8rem;line-height:1.5;padding:0 4px}
+.fb-correct{color:#66ee99}
+.fb-wrong{color:#ee6688}
+#next-btn{display:block;width:100%;padding:13px;background:#cc44aa;border:none;border-radius:8px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;transition:background .15s}
+#next-btn:hover{background:#e83060}
+/* Result screen */
+#result-screen{display:none;text-align:center;padding:2rem 1rem}
+.score-circle{width:110px;height:110px;border-radius:50%;border:3px solid #cc44aa;display:flex;align-items:center;justify-content:center;flex-direction:column;margin:0 auto 1.2rem}
+.score-big{font-size:30px;font-weight:700;color:#cc44aa}
+.score-of{font-size:12px;color:#888}
+.result-title{font-size:20px;font-weight:700;color:#fff;margin-bottom:8px}
+.result-msg{font-size:13px;color:#bbb;margin-bottom:1.5rem;line-height:1.7}
+#restart-btn{padding:12px 32px;background:#cc44aa;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;color:#fff}
+#restart-btn:hover{background:#e83060}
+/* Member cards in result */
+#member-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:1.2rem;text-align:left}
+.m-card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:8px;padding:10px 12px}
+.m-name{font-size:13px;font-weight:600;color:#f0aadd;margin-bottom:2px}
+.m-pos{font-size:11px;color:#888}
+</style>
+</head>
+<body>
+<div id="app">
+  <h2 class="title">💗 Hearts2Hearts Quiz</h2>
+  <p class="sub">Seberapa kenal kamu dengan 8 member H2H?</p>
+
+  <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+
+  <div id="hud">
+    <div class="hud-item"><div class="hud-label">Soal</div><div class="hud-val"><span id="q-num">1</span>/15</div></div>
+    <div class="hud-item"><div class="hud-label">Benar</div><div class="hud-val" id="correct-count">0</div></div>
+    <div class="hud-item"><div class="hud-label">Skor</div><div class="hud-val" id="score-val">0</div></div>
+    <div class="hud-item"><div class="hud-label">Streak 🔥</div><div class="hud-val" id="streak-val">0</div></div>
+  </div>
+
+  <div id="question-box">
+    <div class="q-type" id="q-type"></div>
+    <div class="q-emoji" id="q-emoji" style="display:none"></div>
+    <div class="q-text" id="q-text"></div>
+  </div>
+
+  <div id="choices"></div>
+  <div id="feedback"></div>
+  <button id="next-btn" style="display:none">Soal berikutnya →</button>
+
+  <!-- Hasil akhir -->
+  <div id="result-screen">
+    <div class="score-circle">
+      <div class="score-big" id="final-score"></div>
+      <div class="score-of">poin</div>
+    </div>
+    <div class="result-title" id="result-title"></div>
+    <div class="result-msg" id="result-msg"></div>
+    <button id="restart-btn" onclick="startGame()">🔄 Main Lagi</button>
+    <div id="member-list"></div>
+  </div>
+</div>
+
+<script>
+// =============================================
+// DATA: 8 Member Hearts2Hearts
+// =============================================
+const MEMBERS = [
+  {
+    name: 'Jiwoo',
+    pos: 'Leader, Dancer, Visual',
+    born: '7 Sep 2006',
+    origin: 'Korea (Seoul)',
+    emoji: '🍓',
+    mbti: 'ISTJ',
+    height: '169 cm',
+    fact: 'Mantan balerina, direkrut SM saat isi token bus di minimarket kelas 6 SD'
+  },
+  {
+    name: 'Carmen',
+    pos: 'Vocalist',
+    born: '28 Mar 2006',
+    origin: 'Indonesia (Bali)',
+    emoji: '🌴',
+    mbti: 'ESFP',
+    height: '168 cm',
+    fact: 'Idol Indonesia pertama di SM Entertainment, fasih Bahasa Indonesia, Korea, dan Inggris'
+  },
+  {
+    name: 'Yuha',
+    pos: 'All-Rounder, Vocalist',
+    born: '12 Apr 2007',
+    origin: 'Korea (Wonju)',
+    emoji: '🎀',
+    mbti: '-',
+    height: '~167 cm',
+    fact: 'Trainee terlama H2H (7 tahun), penggemar berat Disney, juara piano nasional kelas 4 SD'
+  },
+  {
+    name: 'Stella',
+    pos: 'Vocalist',
+    born: '18 Jun 2007',
+    origin: 'Korea-Kanada',
+    emoji: '🧁',
+    mbti: 'ENFP',
+    height: '167 cm',
+    fact: 'Tumbuh besar di Vancouver Kanada, bisa main gitar, bass, dan drum, 32 agensi menawarkan kontrak padanya'
+  },
+  {
+    name: 'Juun',
+    pos: 'Main Dancer',
+    born: '3 Des 2008',
+    origin: 'Korea (Goyang)',
+    emoji: '👾',
+    mbti: '-',
+    height: '166 cm',
+    fact: 'Berasal dari keluarga militer, bisa plank lebih dari 10 menit, jago meniru karakter NPC'
+  },
+  {
+    name: 'A-na',
+    pos: 'Visual',
+    born: '20 Des 2008',
+    origin: 'Korea',
+    emoji: '🦊',
+    mbti: '-',
+    height: '171 cm',
+    fact: 'Member tertinggi H2H (171 cm), MC Show! Music Core MBC, bisa melipat lidah jadi dua'
+  },
+  {
+    name: 'Ian',
+    pos: 'Vocalist, Mood-Maker',
+    born: '9 Okt 2009',
+    origin: 'Korea',
+    emoji: '🌸',
+    mbti: '-',
+    height: '~165 cm',
+    fact: 'Mantan model anak, direkrut SM lewat Instagram DM, hobi koleksi parfum'
+  },
+  {
+    name: 'Ye-on',
+    pos: 'Vocalist',
+    born: '19 Apr 2010',
+    origin: 'Korea',
+    emoji: '🐰',
+    mbti: '-',
+    height: '~163 cm',
+    fact: 'Member termuda H2H sekaligus idol termuda di SM Entertainment saat debut'
+  },
+];
+
+const TOTAL_Q = 15;
+
+// =============================================
+// BANK SOAL (30+ soal, dikocok tiap ronde)
+// =============================================
+const QBANK = [
+  // Tebak dari emoji
+  ...MEMBERS.map(m => ({
+    type: 'emoji',
+    q: `Siapa member H2H yang punya emoji ${m.emoji}?`,
+    answer: m.name,
+    emoji: m.emoji
+  })),
+  // Posisi
+  { type:'pos', q:'Siapa yang menjabat sebagai Leader Hearts2Hearts?', answer:'Jiwoo' },
+  { type:'pos', q:'Siapa Main Dancer Hearts2Hearts?', answer:'Juun' },
+  { type:'pos', q:'Siapa yang dikenal sebagai "All-Rounder" H2H?', answer:'Yuha' },
+  { type:'pos', q:'Siapa visual resmi Hearts2Hearts?', answer:'A-na' },
+  { type:'pos', q:'Siapa "Mood-Maker" grup H2H?', answer:'Ian' },
+  // Fakta unik
+  { type:'fact', q:'Member H2H yang merupakan idol Indonesia pertama di SM Entertainment adalah…', answer:'Carmen' },
+  { type:'fact', q:'Siapa member H2H yang punya masa training terpanjang (7 tahun)?', answer:'Yuha' },
+  { type:'fact', q:'Siapa member H2H yang bertumbuh besar di Vancouver, Kanada?', answer:'Stella' },
+  { type:'fact', q:'Siapa member H2H yang menjadi MC Show! Music Core MBC?', answer:'A-na' },
+  { type:'fact', q:'Siapa member H2H yang direkrut SM lewat Instagram DM?', answer:'Ian' },
+  { type:'fact', q:'Siapa member termuda sekaligus idol termuda di SM saat debut H2H?', answer:'Ye-on' },
+  { type:'fact', q:'Siapa member H2H yang merupakan mantan balerina, direkrut di minimarket?', answer:'Jiwoo' },
+  { type:'fact', q:'Siapa member H2H yang bisa main gitar, bass, dan drum?', answer:'Stella' },
+  { type:'fact', q:'Siapa member H2H yang berasal dari Bali, Indonesia?', answer:'Carmen' },
+  { type:'fact', q:'Siapa member H2H yang merupakan mantan model anak?', answer:'Ian' },
+  { type:'fact', q:'Siapa member H2H tertinggi dengan tinggi sekitar 171 cm?', answer:'A-na' },
+  { type:'fact', q:'Siapa member H2H yang bisa plank lebih dari 10 menit?', answer:'Juun' },
+  { type:'fact', q:'Siapa member H2H yang juara piano nasional saat kelas 4 SD?', answer:'Yuha' },
+  { type:'fact', q:'Siapa member H2H yang berasal dari keluarga militer?', answer:'Juun' },
+  { type:'fact', q:'Siapa member H2H yang mendapat tawaran dari 32 agensi berbeda?', answer:'Stella' },
+  // Ulang tahun
+  { type:'bday', q:'Siapa member H2H yang lahir pada 7 September 2006?', answer:'Jiwoo' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 28 Maret 2006?', answer:'Carmen' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 12 April 2007?', answer:'Yuha' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 18 Juni 2007?', answer:'Stella' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 3 Desember 2008?', answer:'Juun' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 20 Desember 2008?', answer:'A-na' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 9 Oktober 2009?', answer:'Ian' },
+  { type:'bday', q:'Siapa member H2H yang lahir pada 19 April 2010?', answer:'Ye-on' },
+  // Asal
+  { type:'origin', q:'Member H2H mana yang berasal dari kota Wonju, Korea?', answer:'Yuha' },
+  { type:'origin', q:'Member H2H mana yang berasal dari Goyang, Korea?', answer:'Juun' },
+  { type:'origin', q:'Siapa satu-satunya member H2H yang berkewarganegaraan Indonesia?', answer:'Carmen' },
+  { type:'origin', q:'Member H2H mana yang berkewarganegaraan Korea-Kanada?', answer:'Stella' },
+  // MBTI
+  { type:'mbti', q:'Member H2H mana yang ber-MBTI ISTJ?', answer:'Jiwoo' },
+  { type:'mbti', q:'Member H2H mana yang ber-MBTI ESFP (dikenal "Happy Virus")?', answer:'Carmen' },
+  { type:'mbti', q:'Member H2H mana yang ber-MBTI ENFP?', answer:'Stella' },
+];
+
+const TYPE_LABEL = {
+  emoji:  'Tebak dari Emoji',
+  pos:    'Posisi Member',
+  fact:   'Fakta Unik',
+  bday:   'Ulang Tahun',
+  origin: 'Asal Daerah',
+  mbti:   'Tipe MBTI'
+};
+
+// =============================================
+// STATE
+// =============================================
+let questions = [], qIdx = 0, score = 0, correct = 0, streak = 0, answered = false;
+
+// =============================================
+// UTILITY
+// =============================================
+function shuffle(arr) { return [...arr].sort(() => Math.random() - .5); }
+
+function buildChoices(answer) {
+  const others = shuffle(MEMBERS.map(m => m.name).filter(n => n !== answer)).slice(0, 3);
+  return shuffle([answer, ...others]);
+}
+
+// =============================================
+// GAME FLOW
+// =============================================
+function startGame() {
+  questions = shuffle(QBANK).slice(0, TOTAL_Q);
+  qIdx = 0; score = 0; correct = 0; streak = 0; answered = false;
+
+  document.getElementById('result-screen').style.display = 'none';
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('progress-bar').style.display = 'block';
+  document.getElementById('question-box').style.display = 'flex';
+  document.getElementById('choices').style.display = 'grid';
+  document.getElementById('feedback').style.display = 'block';
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('next-btn').style.display = 'none';
+
+  updateHUD();
+  showQuestion();
+}
+
+function updateHUD() {
+  document.getElementById('q-num').textContent = qIdx + 1;
+  document.getElementById('correct-count').textContent = correct;
+  document.getElementById('score-val').textContent = score;
+  document.getElementById('streak-val').textContent = streak;
+  document.getElementById('progress-fill').style.width = ((qIdx / TOTAL_Q) * 100) + '%';
+}
+
+function showQuestion() {
+  answered = false;
+  const q = questions[qIdx];
+
+  document.getElementById('q-type').textContent = TYPE_LABEL[q.type] || '';
+  document.getElementById('q-text').textContent = q.q;
+
+  const emojiEl = document.getElementById('q-emoji');
+  if (q.emoji) { emojiEl.style.display = 'block'; emojiEl.textContent = q.emoji; }
+  else emojiEl.style.display = 'none';
+
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = '';
+  document.getElementById('next-btn').style.display = 'none';
+
+  // Buat pilihan jawaban
+  const choices = buildChoices(q.answer);
+  const box = document.getElementById('choices');
+  box.innerHTML = '';
+  choices.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.textContent = c;
+    btn.onclick = () => pick(btn, c, q.answer);
+    box.appendChild(btn);
+  });
+
+  updateHUD();
+}
+
+function pick(btn, chosen, answer) {
+  if (answered) return;
+  answered = true;
+
+  // Highlight semua pilihan
+  document.querySelectorAll('.choice').forEach(b => {
+    b.disabled = true;
+    if (b.textContent === answer) b.classList.add('correct');
+  });
+
+  const fb = document.getElementById('feedback');
+
+  if (chosen === answer) {
+    correct++;
+    streak++;
+    // Bonus streak setiap 3 jawaban berturut-turut
+    const bonus = streak >= 3 ? Math.floor(streak / 3) * 5 : 0;
+    const pts = 10 + bonus;
+    score += pts;
+    btn.classList.add('correct');
+    const m = MEMBERS.find(x => x.name === answer);
+    fb.className = 'fb-correct';
+    fb.innerHTML = `✅ Benar! +${pts} poin${bonus ? ` (streak bonus +${bonus})` : ''}${m ? `<br><small style="opacity:.8">${m.fact}</small>` : ''}`;
+  } else {
+    streak = 0;
+    btn.classList.add('wrong');
+    const m = MEMBERS.find(x => x.name === answer);
+    fb.className = 'fb-wrong';
+    fb.innerHTML = `❌ Salah! Jawaban: <strong>${answer}</strong>${m ? `<br><small style="opacity:.8">${m.fact}</small>` : ''}`;
+  }
+
+  updateHUD();
+  const nextBtn = document.getElementById('next-btn');
+  nextBtn.style.display = 'block';
+  nextBtn.textContent = qIdx < TOTAL_Q - 1 ? 'Soal berikutnya →' : 'Lihat Hasil 🏆';
+}
+
+document.getElementById('next-btn').onclick = () => {
+  qIdx++;
+  if (qIdx >= TOTAL_Q) showResult();
+  else showQuestion();
+};
+
+// =============================================
+// LAYAR HASIL
+// =============================================
+function showResult() {
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('progress-bar').style.display = 'none';
+  document.getElementById('question-box').style.display = 'none';
+  document.getElementById('choices').style.display = 'none';
+  document.getElementById('feedback').style.display = 'none';
+  document.getElementById('next-btn').style.display = 'none';
+
+  const rs = document.getElementById('result-screen');
+  rs.style.display = 'block';
+
+  document.getElementById('final-score').textContent = score;
+
+  const pct = Math.round((correct / TOTAL_Q) * 100);
+  let title, msg;
+
+  if      (pct >= 90) { title = '💗 S2U Sejati!';      msg = `Kamu hafal semua detail member H2H! Benar-benar fan setia yang luar biasa! (${correct}/${TOTAL_Q} benar)`; }
+  else if (pct >= 70) { title = '⭐ H2H Enthusiast!';  msg = `Kamu sangat kenal member H2H! Tinggal sedikit lagi jadi hafal semua. (${correct}/${TOTAL_Q} benar)`; }
+  else if (pct >= 50) { title = '🎀 Casual Fan';        msg = `Lumayan! Coba lagi untuk tingkatkan skormu! (${correct}/${TOTAL_Q} benar)`; }
+  else if (pct >= 30) { title = '👀 Masih Belajar';    msg = `Belum terlalu kenal H2H nih. Pelajari lebih lanjut ya! (${correct}/${TOTAL_Q} benar)`; }
+  else                { title = '🌱 Baru Kenal H2H';   msg = `Saatnya kenalan lebih dekat dengan Hearts2Hearts! (${correct}/${TOTAL_Q} benar)`; }
+
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-msg').textContent = msg;
+
+  // Tampilkan kartu semua member sebagai referensi
+  const ml = document.getElementById('member-list');
+  ml.innerHTML = '<p style="grid-column:1/-1;font-size:12px;color:#888;margin-bottom:4px">📋 Referensi Member:</p>';
+  MEMBERS.forEach(m => {
+    const d = document.createElement('div');
+    d.className = 'm-card';
+    d.innerHTML = `<div class="m-name">${m.emoji} ${m.name}</div><div class="m-pos">${m.pos}</div><div class="m-pos" style="color:#666;margin-top:2px">${m.born}</div>`;
+    ml.appendChild(d);
+  });
+}
+
+// Mulai otomatis
+startGame();
+</script>
+</body>
+</html>
