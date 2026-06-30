@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Memancing Ikan</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#1a1a2e}
+#game{width:700px;min-height:520px;position:relative;overflow:hidden;background:linear-gradient(180deg,#87CEEB 0%,#87CEEB 38%,#1a6b9e 38%,#0d4a73 100%);border-radius:12px;cursor:crosshair;user-select:none}
+#surface{position:absolute;top:38%;left:0;width:100%;height:18px;background:rgba(100,200,255,0.5);border-top:2px solid rgba(150,230,255,0.8)}
+#rod-area{position:absolute;top:0;left:0;width:100%;height:38%;pointer-events:none}
+#ui{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:20}
+.stat{background:rgba(0,0,0,0.5);color:#fff;padding:6px 12px;border-radius:20px;font-size:13px;font-weight:500}
+#msg{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);color:#fff;padding:8px 20px;border-radius:20px;font-size:13px;text-align:center;pointer-events:none;z-index:20;transition:opacity 0.3s;white-space:nowrap}
+#caught-list{position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.5);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;max-width:160px;z-index:20;pointer-events:none}
+#caught-list h4{font-size:11px;color:#adf;margin-bottom:4px;font-weight:500}
+.caught-item{display:flex;align-items:center;gap:4px;margin:2px 0}
+canvas#fishCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#btn-cast{position:absolute;bottom:14px;right:14px;background:rgba(30,120,60,0.85);color:#fff;border:none;border-radius:20px;padding:10px 22px;font-size:14px;font-weight:500;cursor:pointer;z-index:30;transition:background 0.2s}
+#btn-cast:hover{background:rgba(30,150,70,0.95)}
+#splash{position:absolute;pointer-events:none;z-index:15;font-size:18px;transition:all 0.4s}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="fishCanvas"></canvas>
+  <div id="surface"></div>
+  <div id="rod-area">
+    <div id="line"></div>
+    <div id="hook"></div>
+  </div>
+  <div id="ui">
+    <div class="stat">🎣 Tangkapan: <span id="score">0</span></div>
+    <div class="stat">⭐ Poin: <span id="points">0</span></div>
+    <div class="stat">⏱️ <span id="timer">60</span>s</div>
+  </div>
+  <div id="msg">Klik di air untuk melempar pancing!</div>
+  <button id="btn-cast">🎣 Mulai Baru</button>
+  <div id="splash" style="display:none"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('fishCanvas');
+const ctx = canvas.getContext('2d');
+const game = document.getElementById('game');
+const lineEl = document.getElementById('line');
+const hookEl = document.getElementById('hook');
+const scoreEl = document.getElementById('score');
+const pointsEl = document.getElementById('points');
+const timerEl = document.getElementById('timer');
+const msgEl = document.getElementById('msg');
+const btnCast = document.getElementById('btn-cast');
+const splashEl = document.getElementById('splash');
+
+// Daftar 10 jenis ikan
+const FISH_TYPES = [
+  {name:'Ikan Mas',    emoji:'🟡', color:'#f5c518', outline:'#c8960f', pts:10,  speed:1.2, size:1.0, rare:false},
+  {name:'Ikan Nila',   emoji:'🔵', color:'#4a9edd', outline:'#2060aa', pts:15,  speed:1.5, size:0.9, rare:false},
+  {name:'Lele',        emoji:'⚫', color:'#4a3728', outline:'#2a1a10', pts:20,  speed:0.8, size:1.3, rare:false},
+  {name:'Gurame',      emoji:'🟤', color:'#b5651d', outline:'#7a3a0d', pts:25,  speed:1.0, size:1.2, rare:false},
+  {name:'Kakap',       emoji:'🔴', color:'#e83030', outline:'#a01010', pts:40,  speed:1.8, size:1.1, rare:false},
+  {name:'Tuna',        emoji:'🔵', color:'#2255aa', outline:'#112266', pts:60,  speed:2.2, size:1.4, rare:true},
+  {name:'Salmon',      emoji:'🩷', color:'#f08090', outline:'#c04060', pts:50,  speed:1.9, size:1.2, rare:true},
+  {name:'Pari',        emoji:'🟣', color:'#7744aa', outline:'#441166', pts:80,  speed:0.9, size:1.6, rare:true},
+  {name:'Hiu Kecil',   emoji:'⚪', color:'#aaaaaa', outline:'#666666', pts:100, speed:2.5, size:1.7, rare:true},
+  {name:'Ikan Badut',  emoji:'🟠', color:'#ff6622', outline:'#cc3300', pts:35,  speed:1.3, size:0.8, rare:false},
+];
+
+let fishes=[], hookX=0, hookY=0, hooking=false, hookActive=false;
+let score=0, totalPts=0, timeLeft=60, gameActive=false;
+let caught={}, timerInterval, animId;
+let lineStartX=0;
+
+// Sesuaikan ukuran canvas dengan elemen game
+function resize(){
+  canvas.width  = game.offsetWidth;
+  canvas.height = game.offsetHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); spawnFishes(); });
+
+// Posisi permukaan air (38% dari atas)
+function waterY(){ return game.offsetHeight * 0.38 + 9; }
+
+// Buat satu objek ikan acak
+function spawnFish(){
+  const t   = FISH_TYPES[Math.floor(Math.random() * FISH_TYPES.length)];
+  const wY  = waterY();
+  const hh  = game.offsetHeight;
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  return {
+    type:t,
+    x: dir > 0 ? -80 : canvas.width + 80,
+    y: wY + 30 + Math.random() * (hh - wY - 80),
+    dir,
+    speed: (t.speed + Math.random() * 0.5) * dir,
+    wobble: Math.random() * Math.PI * 2,
+    caught: false,
+    catchAnim: 0,
+    size: t.size
+  };
+}
+
+// Isi kolam dengan 12 ikan
+function spawnFishes(){
+  fishes = [];
+  for(let i = 0; i < 12; i++) fishes.push(spawnFish());
+}
+spawnFishes();
+
+// Gambar seekor ikan dengan canvas 2D
+function drawFish(f){
+  if(f.caught) return;
+  const {x, y, dir, wobble, size, type} = f;
+  const w = 50 * size, h = 22 * size;
+
+  ctx.save();
+  ctx.translate(x, y + Math.sin(wobble) * 3);
+  if(dir < 0) ctx.scale(-1, 1); // cerminkan arah kiri
+
+  // Badan
+  ctx.beginPath();
+  ctx.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI*2);
+  ctx.fillStyle   = type.color;
+  ctx.fill();
+  ctx.strokeStyle = type.outline;
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // Sirip ekor
+  ctx.beginPath();
+  ctx.moveTo(w/2+2, 0);
+  ctx.lineTo(w/2+14, -10);
+  ctx.lineTo(w/2+14,  10);
+  ctx.closePath();
+  ctx.fillStyle = type.color; ctx.fill(); ctx.stroke();
+
+  // Mata (putih + pupil)
+  ctx.beginPath();
+  ctx.arc(-w/5, -h/4, h/5, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-w/5 - 2, -h/4 - 2, h/8, 0, Math.PI*2);
+  ctx.fillStyle = '#222'; ctx.fill();
+
+  // Sisik kilap untuk ikan langka
+  if(type.rare){
+    ctx.beginPath();
+    for(let i = 0; i < 5; i++){
+      ctx.arc(-w/3 + i*w/7, (Math.random()-0.5)*h*0.3, 2, 0, Math.PI*2);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// Gambar gelembung acak
+function drawBubbles(){
+  const wY = waterY();
+  ctx.fillStyle = 'rgba(180,230,255,0.25)';
+  fishes.forEach(f => {
+    if(!f.caught && Math.random() < 0.01){
+      for(let i = 0; i < 2; i++){
+        const bx = f.x + (Math.random()-0.5)*30;
+        const by = f.y - Math.random()*20;
+        if(by > wY){ ctx.beginPath(); ctx.arc(bx, by, 2+Math.random()*2, 0, Math.PI*2); ctx.fill(); }
+      }
+    }
+  });
+}
+
+// Latar belakang: awan + gradien air + rumput laut
+function drawBackground(){
+  const wY = waterY();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Awan
+  for(let i = 0; i < 3; i++){
+    ctx.beginPath();
+    ctx.ellipse(canvas.width*(0.2+i*0.3), 20, 40+i*20, 15+i*8, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fill();
+  }
+
+  // Gradien air
+  const grd = ctx.createLinearGradient(0, wY, 0, canvas.height);
+  grd.addColorStop(0, 'rgba(50,150,220,0.15)');
+  grd.addColorStop(1, 'rgba(10,50,90,0.3)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, wY, canvas.width, canvas.height - wY);
+
+  // Tanaman air
+  for(let i = 0; i < 4; i++){
+    const lx = canvas.width*(0.15+i*0.25);
+    ctx.beginPath();
+    ctx.moveTo(lx-20, canvas.height);
+    ctx.lineTo(lx,    wY+50);
+    ctx.lineTo(lx+20, canvas.height);
+    ctx.fillStyle = 'rgba(20,80,30,0.5)'; ctx.fill();
+  }
+}
+
+// Gambar tali pancing dan kail
+function drawHookLine(){
+  if(!hookActive) return;
+  ctx.beginPath();
+  ctx.moveTo(lineStartX, 0);
+  ctx.lineTo(hookX, hookY);
+  ctx.strokeStyle = 'rgba(220,220,200,0.85)';
+  ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Pelampung / kail
+  ctx.beginPath();
+  ctx.arc(hookX, hookY, 6, 0, Math.PI*2);
+  ctx.fillStyle = '#e8c04a'; ctx.strokeStyle = '#8a6010'; ctx.lineWidth = 1.5;
+  ctx.fill(); ctx.stroke();
+
+  // Ujung kail melengkung
+  ctx.beginPath();
+  ctx.moveTo(hookX, hookY+6);
+  ctx.quadraticCurveTo(hookX+8, hookY+14, hookX+3, hookY+18);
+  ctx.strokeStyle = '#8a6010'; ctx.lineWidth = 2; ctx.stroke();
+}
+
+// Loop animasi utama
+function loop(){
+  drawBackground();
+  drawBubbles();
+
+  fishes.forEach(f => {
+    if(f.caught){ f.catchAnim += 0.08; return; }
+
+    // Gerakkan ikan
+    f.x      += f.speed;
+    f.wobble += 0.05;
+
+    // Wrap sisi layar
+    if(f.x >  canvas.width  + 100) f.x = -80;
+    if(f.x < -100)                  f.x = canvas.width + 80;
+
+    drawFish(f);
+
+    // Deteksi tabrakan dengan kail
+    if(hookActive && !hooking){
+      const dist = Math.hypot(f.x - hookX, f.y - hookY);
+      if(dist < 30 * f.size) catchFish(f);
+    }
+  });
+
+  drawHookLine();
+  animId = requestAnimationFrame(loop);
+}
+loop();
+
+// Efek teks melayang saat tangkap
+function showSplash(x, y, text){
+  splashEl.style.display = 'block';
+  splashEl.style.left    = x + 'px';
+  splashEl.style.top     = y + 'px';
+  splashEl.style.opacity = '1';
+  splashEl.textContent   = text;
+  setTimeout(() => { splashEl.style.opacity='0'; splashEl.style.top=(y-30)+'px'; }, 50);
+  setTimeout(() => { splashEl.style.display='none'; splashEl.style.top=y+'px'; }, 600);
+}
+
+// Lempar pancing ke koordinat yang diklik
+function castLine(clientX, clientY){
+  if(!gameActive) return;
+  const rect = game.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  if(y <= waterY()){ showMsg('Lempar ke dalam air! 💦'); return; }
+  hookActive  = true;
+  hooking     = false;
+  hookX       = x;
+  hookY       = y;
+  lineStartX  = canvas.width * 0.5;
+  showSplash(x, waterY(), '💦 Byuur!');
+  showMsg('Menunggu ikan... 🎣');
+}
+
+// Proses saat ikan tertangkap
+function catchFish(f){
+  if(!gameActive) return;
+  f.caught = true;
+  score++;   scoreEl.textContent  = score;
+  totalPts += f.type.pts;
+  pointsEl.textContent = totalPts;
+  caught[f.type.name] = (caught[f.type.name] || 0) + 1;
+  hookActive = false;
+  showSplash(hookX, hookY, `${f.type.rare?'🌟':'✨'} +${f.type.pts}`);
+  showMsg(`${f.type.emoji} ${f.type.name} tertangkap! +${f.type.pts} poin`);
+  updateCaughtList();
+
+  // Ganti dengan ikan baru setelah 1 detik
+  setTimeout(() => {
+    const nf = spawnFish(); nf.x = f.x; nf.y = f.y; nf.caught = false;
+    const idx = fishes.indexOf(f);
+    if(idx > -1) fishes[idx] = nf; else fishes.push(nf);
+  }, 1000);
+}
+
+// Perbarui panel hasil tangkapan
+function updateCaughtList(){
+  let el = document.getElementById('caught-list');
+  if(!el){ el = document.createElement('div'); el.id='caught-list'; game.appendChild(el); }
+  el.innerHTML = '<h4>🗒️ Hasil Tangkapan</h4>';
+  Object.entries(caught).forEach(([n, c]) => {
+    const d = document.createElement('div'); d.className='caught-item';
+    const t = FISH_TYPES.find(f => f.name === n);
+    d.textContent = `${t ? t.emoji : ''} ${n}: ${c}×`;
+    el.appendChild(d);
+  });
+}
+
+function showMsg(m){ msgEl.textContent = m; msgEl.style.opacity = '1'; }
+
+// Mulai / reset game
+function startGame(){
+  score=0; totalPts=0; timeLeft=60; caught={}; hookActive=false;
+  scoreEl.textContent='0'; pointsEl.textContent='0'; timerEl.textContent='60';
+  const el = document.getElementById('caught-list');
+  if(el) el.innerHTML = '<h4>🗒️ Hasil Tangkapan</h4>';
+  spawnFishes();
+  gameActive = true;
+  showMsg('Klik di air untuk melempar pancing!');
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timeLeft--; timerEl.textContent = timeLeft;
+    if(timeLeft <= 0){ clearInterval(timerInterval); endGame(); }
+  }, 1000);
+}
+
+function endGame(){
+  gameActive=false; hookActive=false;
+  showMsg(`⏰ Waktu habis! Tangkapan: ${score} ikan | ${totalPts} poin 🏆`);
+}
+
+// Event listener
+game.addEventListener('click',      e => castLine(e.clientX, e.clientY));
+game.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  castLine(t.clientX, t.clientY);
+}, {passive:false});
+btnCast.addEventListener('click', e => { e.stopPropagation(); startGame(); });
+
+// Mulai otomatis
+startGame();
+</script>
+</body>
+</html>
